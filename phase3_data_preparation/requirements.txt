@@ -1,0 +1,5 @@
+streamlit
+requests             # For the OpenRouter AI API call
+supabase             # For connecting to Supabase
+plotly               # For interactive charts (Radar, Scatter)
+pandas
