@@ -182,6 +182,11 @@ if 'master_df' in locals():
     # Define the target variable: 1 for high performer (Rating 5), 0 otherwise
     master_df['is_high_performer'] = np.where(master_df['rating'] == 5, 1, 0)
 
+    # Define columns to impute (all numeric columns except identifiers and target)
+    cols_to_impute = master_df.select_dtypes(include=np.number).columns.tolist()
+    cols_to_impute = [col for col in cols_to_impute if col not in ['employee_id', 'rating', 'year', 'is_high_performer']]
+
+
     # Filter for only numeric columns for correlation (the Talent Variables)
     numeric_tv_cols = [col for col in master_df.columns if col in cols_to_impute]
 
