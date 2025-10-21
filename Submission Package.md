@@ -146,7 +146,6 @@ The pipeline is built in four clear stages:
 - **Success Percentile**: Puts the score into immediate context, enabling easy segmentation (e.g., "Top 10%").
 - **High Performer Flag**: Allows for validation and tracking by identifying employees who are already top performers.
 - **Calculation Timestamp**: Ensures data lineage and allows for tracking score changes over time.
-
 ---
 
 ## AI App & Dashboard Overview
@@ -204,7 +203,6 @@ The Streamlit dashboard serves as an interactive talent intelligence platform th
 - **Automated strength identification** based on TGV match patterns
 - **Confidence scoring** for match recommendations
 - **Development area prioritization** for growth planning
-
 ---
 
 ## Conclusion
@@ -225,11 +223,9 @@ This solution transforms talent mobility from a manual, subjective process to an
 
 ### Final Recommendation
 The Talent Match Intelligence System demonstrates immediate value by identifying perfect-match internal candidates for key roles. The combination of robust data analysis, intuitive visualization, and AI-powered insights creates a sustainable competitive advantage in talent optimization. The platform is ready for production deployment and continuous improvement.
-
 ---
 
 ## Additional Files
-
 ### Analysis Notebooks
 - **Google Colab Analysis**: https://colab.research.google.com/drive/1VsuoMXZMtddwNK7VLRlxmw9MIrgSlYiV?usp=sharing
 - **Python Analysis Scripts**: Complete data exploration and validation code
@@ -237,8 +233,7 @@ The Talent Match Intelligence System demonstrates immediate value by identifying
 
 ### Supporting Documentation
 - **Technical Architecture**: Database schema and API documentation
-- **User Guide**: Complete instructions for business users
-- 
+- **User Guide**: Complete instructions for business users 
 ### Generated Visuals
 - Correlation matrices and heatmaps
 - Performance gap analysis charts
