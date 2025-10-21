@@ -95,10 +95,11 @@ Talent Success Score = (0.30 × SEA) + (0.20 × CEX) + (0.15 × QDD) +
 
 **Objective**: Validate scores and provide actionable business intelligence.
 
-**Key Results**:
-- **24-point performance gap**: High performers avg 82 vs others 58
-- **82% prediction accuracy** for identifying top talent
-- **Clear segmentation**: Top 10%, High-potential, Core, Development focus
+**Key Results:**
+- **Strong Predictive Validity**: Success formula based on 0.68-0.83 correlation strengths
+- **Clear Performance Differentiation**: 24-point gap between high and average performers
+- **Actionable Talent Segmentation**: Data-driven categorization into four talent tiers
+- **Streamlined Identification**: Automated scoring reduces manual review processes
 
 ## Business Applications
 
