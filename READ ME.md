@@ -137,12 +137,17 @@ Talent Success Score = (0.30 × SEA) + (0.20 × CEX) + (0.15 × QDD) +
 
 ## Usage Examples
 
-```python
-# Generate success scores for new candidates
-from talent_calculator import calculate_success_score
-score = calculate_success_score(SEA=85, CEX=78, QDD=92, iq=88, Papi_T=32, Papi_G=28)
-print(f"Talent Success Score: {score}")  # Output: 82.35
-```
+### 1. Configure Role Requirements
+- Set job level, competencies, and qualifications in the sidebar
+- Select high-performing benchmark employees for comparison
+
+### 2. Generate Talent Matches
+- System calculates match rates using the Success Formula
+- View ranked candidates with detailed strength analysis
+
+### 3. Analyze Individual Profiles
+- Explore radar charts comparing candidates to benchmarks
+- Identify development areas and key strengths
 
 ## Contributing
 
