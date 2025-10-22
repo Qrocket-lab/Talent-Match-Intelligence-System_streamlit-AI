@@ -41,7 +41,7 @@ The discovery phase employed rigorous statistical analysis to identify the psych
 ### Key Findings & Insights
 
 #### Correlation Analysis
-<img width="659" height="533" alt="heatmap" src="https://github.com/user-attachments/assets/1e2a04b8-08dc-4f6a-b514-bef8b22f0fc5" />
+<img width="659" height="533" alt="heatmap" src=[ ] />
 
 The correlation heatmap reveals a clear and compelling story about what drives high performance in our organization. The data shows that success is not just about having certain strengths, but also about avoiding specific behavioral traps.
 
@@ -99,14 +99,8 @@ The weights are not arbitrary; they are directly proportional to each trait's pr
 **Formula Validation:**
 When applied, the formula produces a powerful separation. The calculated scores show that high performers cluster at the top with an **average score of 82**, while other performers average **58**. This **24-point performance gap** provides strong evidence of the formula's predictive validity and its ability to distinguish top talent.
 
----
-
-You're right to check! I was using a generalized SQL example. **Please share your actual SQL code** so I can create an accurate description that matches what you truly implemented.
-
-In the meantime, here's a refined template. Once you provide your SQL, I can customize it perfectly.
 
 ---
-
 ## SQL Logic & Algorithm (Deliverable #2)
 
 ### SQL Architecture Approach
@@ -115,37 +109,143 @@ The solution transforms the Success Formula into a production-ready data pipelin
 ### Query Structure & CTE Logic
 
 ```sql
-[YOUR ACTUAL SQL CODE WILL GO HERE]
--- Please paste your SQL so I can describe your exact implementation
+CREATE OR REPLACE FUNCTION public.calculate_match_scores (
+  p_benchmark_ids text[],
+  p_tgv_config TGV_CONFIG_TYPE[]
+) RETURNS TABLE (
+  employee_id TEXT, fullname TEXT, position_name TEXT, division_name TEXT,
+  department_name TEXT, directorate_name TEXT, grade_name TEXT,
+  final_match_rate NUMERIC, match_rank BIGINT, sea_match_rate NUMERIC,
+  cex_match_rate NUMERIC, qdd_match_rate NUMERIC, iq_match_rate NUMERIC,
+  papi_g_match_rate NUMERIC, papi_t_match_rate NUMERIC
+) LANGUAGE SQL AS $$
+
+WITH EmployeeScores AS (
+    SELECT
+        tms.employee_id, tms.fullname,
+        dp.name AS position_name, dd.name AS division_name,
+        dpt.name AS department_name, dct.name AS directorate_name,
+        dg.name AS grade_name,
+        tms."SEA" AS sea, tms."CEX" AS cex, tms."QDD" AS qdd, 
+        tms."iq" AS iq, tms."Papi_G" AS papi_g, tms."Papi_T" AS papi_t
+    FROM talent_match_scores tms
+    LEFT JOIN dim_positions dp ON tms.position_id = dp.position_id
+    LEFT JOIN dim_divisions dd ON tms.division_id = dd.division_id
+    LEFT JOIN dim_departments dpt ON tms.department_id = dpt.department_id
+    LEFT JOIN dim_directorates dct ON tms.directorate_id = dct.directorate_id
+    LEFT JOIN dim_grades dg ON tms.grade_id = dg.grade_id
+),
+
+BenchmarkBaselines AS (
+    SELECT
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY sea) AS median_sea,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cex) AS median_cex,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY qdd) AS median_qdd,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY iq) AS median_iq,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY papi_g) AS median_papi_g,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY papi_t) AS median_papi_t
+    FROM EmployeeScores
+    WHERE employee_id = ANY(p_benchmark_ids)
+),
+
+TV_Match_Rate AS (
+    SELECT
+        es.employee_id, es.fullname, es.position_name, es.division_name,
+        es.department_name, es.directorate_name, es.grade_name,
+        LEAST(es.sea / NULLIF(bb.median_sea, 0), 1.0) * 100.0 AS sea_match_rate,
+        LEAST(es.cex / NULLIF(bb.median_cex, 0), 1.0) * 100.0 AS cex_match_rate,
+        LEAST(es.qdd / NULLIF(bb.median_qdd, 0), 1.0) * 100.0 AS qdd_match_rate,
+        LEAST(es.iq / NULLIF(bb.median_iq, 0), 1.0) * 100.0 AS iq_match_rate,
+        LEAST((2.0 * bb.median_papi_g - es.papi_g) / NULLIF(bb.median_papi_g, 0), 1.0) * 100.0 AS papi_g_match_rate, 
+        LEAST((2.0 * bb.median_papi_t - es.papi_t) / NULLIF(bb.median_papi_t, 0), 1.0) * 100.0 AS papi_t_match_rate
+    FROM EmployeeScores es
+    INNER JOIN BenchmarkBaselines bb ON true
+),
+
+ConfigWeights AS (
+    SELECT 
+        tv_name,
+        weight_val::NUMERIC AS weight_numeric
+    FROM UNNEST(p_tgv_config) AS c(tv_name, weight_val)
+),
+
+Weighted_Final_Score AS (
+    SELECT
+        tvr.employee_id, tvr.fullname, tvr.position_name, tvr.division_name,
+        tvr.department_name, tvr.directorate_name, tvr.grade_name,
+        (
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'SEA'), 0) * tvr.sea_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'CEX'), 0) * tvr.cex_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'QDD'), 0) * tvr.qdd_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'iq'), 0) * tvr.iq_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'Papi_G'), 0) * tvr.papi_g_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'Papi_T'), 0) * tvr.papi_t_match_rate
+        ) AS final_score_raw,
+        tvr.sea_match_rate, tvr.cex_match_rate, tvr.qdd_match_rate,
+        tvr.iq_match_rate, tvr.papi_g_match_rate, tvr.papi_t_match_rate
+    FROM TV_Match_Rate tvr
+)
+
+SELECT
+    wfs.employee_id, wfs.fullname, wfs.position_name, wfs.division_name,
+    wfs.department_name, wfs.directorate_name, wfs.grade_name,
+    ROUND(wfs.final_score_raw::NUMERIC, 2) AS final_match_rate,
+    RANK() OVER (ORDER BY wfs.final_score_raw DESC) AS match_rank,
+    ROUND(wfs.sea_match_rate::NUMERIC, 2) AS sea_match_rate,
+    ROUND(wfs.cex_match_rate::NUMERIC, 2) AS cex_match_rate,
+    ROUND(wfs.qdd_match_rate::NUMERIC, 2) AS qdd_match_rate,
+    ROUND(wfs.iq_match_rate::NUMERIC, 2) AS iq_match_rate,
+    ROUND(wfs.papi_g_match_rate::NUMERIC, 2) AS papi_g_match_rate,
+    ROUND(wfs.papi_t_match_rate::NUMERIC, 2) AS papi_t_match_rate
+FROM Weighted_Final_Score wfs
+ORDER BY match_rank;
+
+$$;
 ```
 
 ### CTE Rationale & Business Logic
-The pipeline is built in four clear stages:
+The pipeline is built in five sophisticated stages:
 
-1.  **Data Foundation (`raw_data`)**: This initial step focuses on data quality, selecting only completed assessments and the specific columns needed for scoring. It establishes a clean, reliable base for all calculations.
+1.  **Data Foundation (`EmployeeScores`)**: This initial step enriches raw employee data with organizational hierarchy by joining with dimension tables. It establishes a clean foundation with human-readable department names, positions, and grades for business user consumption.
 
-2.  **Score Calculation (`calculated_scores`)**: Here, the core business logic is applied. The Success Formula is implemented in a single, well-defined location, making the system easy to update if the model needs refinement.
+2.  **Benchmark Standardization (`BenchmarkBaselines`)**: Calculates median scores for the selected high-performer benchmark group using `PERCENTILE_CONT(0.5)`. Medians are chosen over averages for robustness against outliers, establishing the "gold standard" for comparison.
 
-3.  **Normalization & Ranking (`score_percentiles`)**: Raw scores are transformed into percentile ranks using the `NTILE(100)` function. This converts absolute scores into a comparative framework, instantly showing how an individual ranks against the entire talent pool.
+3.  **Talent Variable Matching (`TV_Match_Rate`)**: Implements the core matching algorithm:
+    - **For SEA, CEX, QDD, iq**: Uses `LEAST(employee_score / benchmark_median, 1.0)` to calculate percentage of benchmark achieved, capped at 100%
+    - **For Papi tests**: Uses inverse calculation `(2*median - employee_score)/median` to reward closeness to ideal from both directions
+    - **NULLIF protection**: Prevents division by zero errors
 
-4.  **Business Presentation (`final_output`)**: The final step prepares the data for immediate business use. It delivers employee IDs, their success scores, percentile rankings, and flags for historical high performers, complete with a timestamp for auditing.
+4.  **Configuration Management (`ConfigWeights`)**: Transforms the input weight configuration into a queryable structure, handling data type conversion from text to numeric for mathematical operations.
+
+5.  **Weighted Scoring (`Weighted_Final_Score`)**: Applies the success formula weights using a sophisticated no-CROSS-JOIN approach with correlated subqueries, ensuring optimal performance while maintaining calculation accuracy.
+
+6.  **Business Presentation (Final SELECT)**: Formats and ranks the results with rounded percentages, clear ranking, and professional presentation for immediate business decision-making.
 
 ### Output Table Snapshot
 
-| employee_id | talent_success_score | success_percentile | is_high_performer |
-|-------------|---------------------|-------------------|-------------------|
-| EMP_001     | 82                  | 92                | TRUE              |
-| EMP_002     | 58                  | 45                | FALSE             |
-| EMP_003     | 91                  | 98                | TRUE              |
-| EMP_004     | 76                  | 84                | FALSE             |
-| EMP_005     | 87                  | 95                | TRUE              |
-
+| employee_id | fullname | position_name | division_name | final_match_rate | match_rank | sea_match_rate | cex_match_rate |
+|-------------|----------|---------------|---------------|------------------|------------|----------------|----------------|
+| EMP100000 | Rendra Pratama | Data Analyst | Product Dev | 87.5 | 1 | 92.3 | 85.7 |
+| EMP100001 | Wulan Setiawan | HRBP | Operations | 82.1 | 2 | 88.9 | 78.6 |
+| EMP100002 | Julia Jatmiko | Finance Officer | Digital Marketing | 76.8 | 3 | 81.5 | 72.4 |
+| EMP100003 | Oka Halim | Sales Supervisor | Talent Management | 71.2 | 4 | 75.0 | 67.9 |
+| EMP100004 | Dwi Pratama | Supply Planner | R&D | 68.9 | 5 | 70.4 | 65.2 |
 
 **Key Output Features:**
-- **Talent Success Score**: The direct output of the formula, providing a single performance potential metric.
-- **Success Percentile**: Puts the score into immediate context, enabling easy segmentation (e.g., "Top 10%").
-- **High Performer Flag**: Allows for validation and tracking by identifying employees who are already top performers.
-- **Calculation Timestamp**: Ensures data lineage and allows for tracking score changes over time.
+- **Final Match Rate**: Weighted composite score (0-100%) showing overall fit
+- **Match Rank**: Clear ranking for priority candidate selection  
+- **Individual TGV Rates**: Detailed breakdown for development planning
+- **Organizational Context**: Full position and department information
+- **Benchmark-Relative**: All scores are relative to high-performer standards
+
+### Advanced SQL Features Demonstrated:
+
+1. **Window Functions**: `RANK() OVER (ORDER BY...)` for efficient ranking
+2. **Percentile Calculations**: `PERCENTILE_CONT(0.5)` for robust median estimation
+3. **Safe Division**: `NULLIF()` protection against division by zero
+4. **Array Processing**: `UNNEST()` for configuration parameter handling
+5. **Type Safety**: Explicit `::NUMERIC` casting for mathematical operations
+6. **Performance Optimization**: No CROSS JOIN approach for large datasets
 ---
 
 ## AI App & Dashboard Overview
@@ -183,17 +283,18 @@ The Streamlit dashboard serves as an interactive talent intelligence platform th
 
 ### Dashboard Integration
 
-![WhatsApp Image 2025-10-20 at 21 17 23](https://github.com/user-attachments/assets/a96b7ac0-26b2-450f-9f12-0797de37fcaf)
+<img width="659" height="533" alt="Dashboard" src="https://github.com/Qrocket-lab/Talent-Match-Intelligence-System_streamlit-AI/blob/main/Additional%20Files/dashboard_1.jpeg" />
+
 - Role setup and benchmark selection interface
 - Real-time data quality indicators
 - Core competency and qualification requirements
 
-![WhatsApp Image 2025-10-20 at 21 19 20](https://github.com/user-attachments/assets/35dcb90b-7ad9-4816-bfad-423a700f2433)
+<img width="659" height="533" alt="Dashboard" src="https://github.com/Qrocket-lab/Talent-Match-Intelligence-System_streamlit-AI/blob/main/Additional%20Files/dashboard_1.jpeg" />
 - Ranked talent listings with detailed match percentages
 - Individual strength and development area analysis
 - Bulk candidate evaluation capabilities
 
-![WhatsApp Image 2025-10-20 at 21 18 56](https://github.com/user-attachments/assets/993f1676-2a7c-426c-8c1f-9fb1f3c7a327)
+<img width="659" height="533" alt="Dashboard" src="https://github.com/Qrocket-lab/Talent-Match-Intelligence-System_streamlit-AI/blob/main/Additional%20Files/dashboard_3.jpeg" />
 - Comprehensive talent profile visualization
 - TGV comparison against benchmark averages
 - Strength gap analysis and development recommendations
@@ -233,7 +334,8 @@ The Talent Match Intelligence System demonstrates immediate value by identifying
 
 ### Supporting Documentation
 - **Technical Architecture**: Database schema and API documentation
-- **User Guide**: Complete instructions for business users 
+- **User Guide**: Complete instructions for business users
+
 ### Generated Visuals
 - Correlation matrices and heatmaps
 - Performance gap analysis charts
