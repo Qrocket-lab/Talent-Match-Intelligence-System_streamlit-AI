@@ -1,9 +1,9 @@
-drop function IF exists public.calculate_match_scores (text[], tgv_config_type[]);
+DROP FUNCTION IF EXISTS public.calculate_match_scores (text[], tgv_config_type[]);
 
-create or replace function public.calculate_match_scores (
+CREATE OR REPLACE FUNCTION public.calculate_match_scores (
   p_benchmark_ids text[],
   p_tgv_config TGV_CONFIG_TYPE[]
-) RETURNS table (
+) RETURNS TABLE (
   employee_id TEXT,
   fullname TEXT,
   position_name TEXT,
@@ -19,11 +19,13 @@ create or replace function public.calculate_match_scores (
   iq_match_rate NUMERIC,
   papi_g_match_rate NUMERIC,
   papi_t_match_rate NUMERIC
-) LANGUAGE sql
-set
-  search_path = pg_catalog,
-  public as $$
+) LANGUAGE SQL
+SET search_path = pg_catalog, public AS $$
 
+/*
+CTE 1: EmployeeScores
+Purpose: Gather all employee data with their test scores and organizational hierarchy
+*/
 WITH EmployeeScores AS (
     SELECT
         tms.employee_id,
@@ -33,7 +35,6 @@ WITH EmployeeScores AS (
         dpt.name AS department_name,
         dct.name AS directorate_name,
         dg.name AS grade_name,
-        
         tms."SEA" AS sea,
         tms."CEX" AS cex,
         tms."QDD" AS qdd, 
@@ -48,6 +49,10 @@ WITH EmployeeScores AS (
     LEFT JOIN dim_grades dg ON tms.grade_id = dg.grade_id
 ),
 
+/*
+CTE 2: BenchmarkBaselines
+Purpose: Calculate median scores for the benchmark group
+*/
 BenchmarkBaselines AS (
     SELECT
         PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY sea) AS median_sea,
@@ -60,6 +65,10 @@ BenchmarkBaselines AS (
     WHERE employee_id = ANY(p_benchmark_ids)
 ),
 
+/*
+CTE 3: TV_Match_Rate
+Purpose: Calculate how closely each employee matches the benchmark medians
+*/
 TV_Match_Rate AS (
     SELECT
         es.employee_id,
@@ -69,17 +78,35 @@ TV_Match_Rate AS (
         es.department_name,
         es.directorate_name,
         es.grade_name,
-        
-        LEAST(es.sea / bb.median_sea, 1.0) * 100.0 AS sea_match_rate,
-        LEAST(es.cex / bb.median_cex, 1.0) * 100.0 AS cex_match_rate,
-        LEAST(es.qdd / bb.median_qdd, 1.0) * 100.0 AS qdd_match_rate,
-        LEAST(es.iq / bb.median_iq, 1.0) * 100.0 AS iq_match_rate,
+        LEAST(es.sea / NULLIF(bb.median_sea, 0), 1.0) * 100.0 AS sea_match_rate,
+        LEAST(es.cex / NULLIF(bb.median_cex, 0), 1.0) * 100.0 AS cex_match_rate,
+        LEAST(es.qdd / NULLIF(bb.median_qdd, 0), 1.0) * 100.0 AS qdd_match_rate,
+        LEAST(es.iq / NULLIF(bb.median_iq, 0), 1.0) * 100.0 AS iq_match_rate,
         LEAST((2.0 * bb.median_papi_g - es.papi_g) / NULLIF(bb.median_papi_g, 0), 1.0) * 100.0 AS papi_g_match_rate, 
         LEAST((2.0 * bb.median_papi_t - es.papi_t) / NULLIF(bb.median_papi_t, 0), 1.0) * 100.0 AS papi_t_match_rate
-        
-    FROM EmployeeScores es, BenchmarkBaselines bb
+    FROM EmployeeScores es
+    INNER JOIN BenchmarkBaselines bb ON true
 ),
 
+/*
+CTE 4: ConfigWeights
+Purpose: Extract and convert weights from the configuration array
+- Explicitly converts weight values to NUMERIC type
+- Provides a clean interface for weight lookup
+*/
+ConfigWeights AS (
+    SELECT 
+        tv_name,
+        weight_val::NUMERIC AS weight_numeric  -- Convert to numeric for calculations
+    FROM UNNEST(p_tgv_config) AS c(tv_name, weight_val)
+),
+
+/*
+CTE 5: Weighted_Final_Score
+Purpose: Calculate the final weighted score without CROSS JOIN
+- Uses subqueries to lookup numeric weights from ConfigWeights
+- Handles missing weights by returning 0
+*/
 Weighted_Final_Score AS (
     SELECT
         tvr.employee_id,
@@ -89,33 +116,28 @@ Weighted_Final_Score AS (
         tvr.department_name,
         tvr.directorate_name,
         tvr.grade_name,
-        
-        SUM(
-            CASE 
-                WHEN config.tv_name = 'SEA' THEN tvr.sea_match_rate * config.weight 
-                WHEN config.tv_name = 'CEX' THEN tvr.cex_match_rate * config.weight
-                WHEN config.tv_name = 'QDD' THEN tvr.qdd_match_rate * config.weight
-                WHEN config.tv_name = 'iq'  THEN tvr.iq_match_rate  * config.weight
-                WHEN config.tv_name = 'Papi_G' THEN tvr.papi_g_match_rate * config.weight
-                WHEN config.tv_name = 'Papi_T' THEN tvr.papi_t_match_rate * config.weight
-                ELSE 0 
-            END
+        -- Calculate final score by summing weighted match rates
+        -- Each subquery looks up the numeric weight for the specific test
+        (
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'SEA'), 0) * tvr.sea_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'CEX'), 0) * tvr.cex_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'QDD'), 0) * tvr.qdd_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'iq'), 0) * tvr.iq_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'Papi_G'), 0) * tvr.papi_g_match_rate +
+            COALESCE((SELECT cw.weight_numeric FROM ConfigWeights cw WHERE cw.tv_name = 'Papi_T'), 0) * tvr.papi_t_match_rate
         ) AS final_score_raw,
-        
         tvr.sea_match_rate,
         tvr.cex_match_rate,
         tvr.qdd_match_rate,
         tvr.iq_match_rate,
         tvr.papi_g_match_rate,
         tvr.papi_t_match_rate
-        
     FROM TV_Match_Rate tvr
-    CROSS JOIN UNNEST(p_tgv_config) AS config
-    GROUP BY 1, 2, 3, 4, 5, 6, 7, 
-             tvr.sea_match_rate, tvr.cex_match_rate, tvr.qdd_match_rate, 
-             tvr.iq_match_rate, tvr.papi_g_match_rate, tvr.papi_t_match_rate
 )
 
+/*
+Final SELECT: Format and present results
+*/
 SELECT
     wfs.employee_id,
     wfs.fullname,
