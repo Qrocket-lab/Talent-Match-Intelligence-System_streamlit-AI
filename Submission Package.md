@@ -41,7 +41,7 @@ The discovery phase employed rigorous statistical analysis to identify the psych
 ### Key Findings & Insights
 
 #### Correlation Analysis
-<img width="659" height="533" alt="heatmap" src=[https://github.com/Qrocket-lab/Talent-Match-Intelligence-System_streamlit-AI/blob/main/Additional%20Files/Untitled1.png] />
+<img width="659" height="533" alt="heatmap" src="https://github.com/Qrocket-lab/Talent-Match-Intelligence-System_streamlit-AI/blob/main/Additional%20Files/Untitled1.png" />
 
 The correlation heatmap reveals a clear and compelling story about what drives high performance in our organization. The data shows that success is not just about having certain strengths, but also about avoiding specific behavioral traps.
 
