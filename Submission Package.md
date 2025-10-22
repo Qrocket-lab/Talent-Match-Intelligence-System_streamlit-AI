@@ -41,7 +41,7 @@ The discovery phase employed rigorous statistical analysis to identify the psych
 ### Key Findings & Insights
 
 #### Correlation Analysis
-<img width="659" height="533" alt="heatmap" src=[ ] />
+<img width="659" height="533" alt="heatmap" src=[https://github.com/Qrocket-lab/Talent-Match-Intelligence-System_streamlit-AI/blob/main/Additional%20Files/Untitled1.png] />
 
 The correlation heatmap reveals a clear and compelling story about what drives high performance in our organization. The data shows that success is not just about having certain strengths, but also about avoiding specific behavioral traps.
 
@@ -323,6 +323,7 @@ This solution transforms talent mobility from a manual, subjective process to an
 - **Team Composition**: Optimize entire team building based on complementary trait combinations
 
 ### Final Recommendation
+
 The Talent Match Intelligence System demonstrates immediate value by identifying perfect-match internal candidates for key roles. The combination of robust data analysis, intuitive visualization, and AI-powered insights creates a sustainable competitive advantage in talent optimization. The platform is ready for production deployment and continuous improvement.
 ---
 
